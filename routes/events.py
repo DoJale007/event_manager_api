@@ -5,7 +5,8 @@ from utils import replace_mongo_id
 from typing import Annotated
 import cloudinary
 import cloudinary.uploader
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dependencies.authn import is_authenticated
+
 # Create events router
 events_router = APIRouter()
 
@@ -34,9 +35,18 @@ def post_events(
     title: Annotated[str, Form()],
     description: Annotated[str, Form()],
     flyer: Annotated[UploadFile, File()],
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]
+    user_id: Annotated[str, Depends(is_authenticated)],
 ):
-    print(credentials)
+    # Ensure an event with title and user id does not exist
+    event_count = events_collection.count_documents(
+        filter={"$and": [{"title": title}, {"owner": user_id}]}
+    )
+    if event_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Event with {title} and {user_id} already exist!",
+        )
+
     # Upload flyer to cloudinary to get a url
     upload_result = cloudinary.uploader.upload(flyer.file)
     print(upload_result)
@@ -46,6 +56,7 @@ def post_events(
             "title": title,
             "description": description,
             "flyer": upload_result["secure_url"],
+            "owner": user_id,  # only allows is owner function for authorization
         }
     )
     # Return response
@@ -91,8 +102,9 @@ def replace_event(
     return {"message": "Event replaced succefully"}
 
 
-@events_router.delete("/events/{event_id}")
-def delete_event_by_id(event_id):
+@events_router.delete("/events/{event_id}", dependencies=[Depends(is_authenticated)])
+# def delete_event(event_id, user_id: Annotated[str, Depends(is_authenticated)]):
+def delete_event(event_id):
     # Check if event_id is valid mongo id
     if not ObjectId.is_valid(event_id):
         raise HTTPException(

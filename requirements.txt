@@ -5,3 +5,6 @@ python-multipart
 cloudinary
 bcrypt
 pyjwt
+
+
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4Y2Q4MjlhNzAwZTQ0ODk3MTY1NTAwNCIsImV4cCI6MTc1ODMwMjQ2MH0.cFNVKK95WOUafEdO7bQj_JSs5vkKfTMiKLI6WLGH2uU"
