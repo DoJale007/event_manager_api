@@ -1,3 +1,4 @@
+from enum import Enum
 from fastapi import APIRouter, Form, status, HTTPException
 from typing import Annotated
 from pydantic import EmailStr
@@ -7,8 +8,15 @@ import jwt
 import os
 from datetime import timezone, datetime, timedelta
 
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    HOST = "host"
+    GUEST = "guest"
+
+
 # create users router
-users_router = APIRouter()
+users_router = APIRouter(tags=["Users"])
 
 
 # Define endpoints
@@ -17,6 +25,7 @@ def register_user(
     email: Annotated[EmailStr, Form()],
     password: Annotated[str, Form(min_length=8)],
     username: Annotated[str, Form()],
+    role: Annotated[UserRole, Form()] = UserRole.GUEST,
 ):
     # Ensure user does not exist
     user_count = users_collection.count_documents(filter={"email": email})
@@ -26,7 +35,12 @@ def register_user(
     hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     # Save user into database
     users_collection.insert_one(
-        {"username": username, "email": email, "password": hashed_password.decode()}
+        {
+            "username": username,
+            "email": email,
+            "password": hashed_password.decode(),
+            "role": role,
+        }
     )
     # Return response
     return {"Message": "User registered successfully!"}

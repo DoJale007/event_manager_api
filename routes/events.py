@@ -1,11 +1,13 @@
 from fastapi import Form, File, UploadFile, HTTPException, status, APIRouter, Depends
 from db import events_collection
 from bson.objectid import ObjectId
-from utils import replace_mongo_id
+from utils import replace_mongo_id, genai_client
+from google.genai import types
 from typing import Annotated
 import cloudinary
 import cloudinary.uploader
 from dependencies.authn import is_authenticated
+from dependencies.authz import has_roles
 
 # Create events router
 events_router = APIRouter()
@@ -13,13 +15,13 @@ events_router = APIRouter()
 
 # Events endpoints
 @events_router.get("/events")
-def get_events(title="", description="", limit=10, skip=0):
+def get_events(query="", limit=10, skip=0):
     # Get all events from database
     events = events_collection.find(
         filter={
             "$or": [
-                {"title": {"$regex": title, "$options": "i"}},
-                {"description": {"$regex": description, "$options": "i"}},
+                {"title": {"$regex": query, "$options": "i"}},
+                {"description": {"$regex": query, "$options": "i"}},
             ]
         },
         limit=int(limit),
@@ -30,7 +32,7 @@ def get_events(title="", description="", limit=10, skip=0):
     # return{"data": list(map(remove_mongo_id, events))}
 
 
-@events_router.post("/events")
+@events_router.post("/events", dependencies=[Depends(has_roles(["host", "admin"]))])
 def post_events(
     title: Annotated[str, Form()],
     description: Annotated[str, Form()],
@@ -117,3 +119,26 @@ def delete_event(event_id):
             status.HTTP_422_UNPROCESSABLE_ENTITY, "Sorry, no event found to delete!"
         )
     return {"message": "Event deleted successfully"}
+
+
+@events_router.get("/events/{event_id}/similar")
+def get_similar_events(event_id, limit=10, skip=0):
+    # Check if event id is valid
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid Mongo id received"
+        )
+    # Get event from database by id
+    event = events_collection.find_one({"_id": ObjectId(event_id)})
+    events = events_collection.find(
+        filter={
+            "$or": [
+                {"title": {"$regex": event, "$options": "i"}},
+                {"description": {"$regex": event, "$options": "i"}},
+            ]
+        },
+        limit=int(limit),
+        skip=int(skip),
+    ).to_list()
+    # Return response
+    return {"data": list(map(replace_mongo_id, events))}
